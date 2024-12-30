@@ -394,14 +394,22 @@ class EditableSVG(QDialog):
 
     def save_changes(self):
         """Save updated positions of dots to the SVG file."""
+        # Declare the SVG namespace
+        svg_ns = "http://www.w3.org/2000/svg"
+        ET.register_namespace("", svg_ns)  # Set empty prefix for default namespace
+
+        # Update positions of the dots
         for dot, circle in self.groups:
             new_cx = dot.sceneBoundingRect().center().x()
             new_cy = dot.sceneBoundingRect().center().y()
             circle.set("cx", str(new_cx))
             circle.set("cy", str(new_cy))
 
+        # Write the modified SVG tree back to the file
+        ET.indent(self.svg_tree, space="  ", level=0)  # Pretty-print XML for readability
         self.svg_tree.write(self.output_file, encoding="utf-8", xml_declaration=True)
         QMessageBox.information(self, "Success", f"Changes saved to {self.output_file}")
+
 
 
 if __name__ == "__main__":
