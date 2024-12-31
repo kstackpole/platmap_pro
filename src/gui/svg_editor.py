@@ -376,11 +376,14 @@ class EditableSVG(QDialog):
             class_attr = group.get("class")
             if class_attr in color_map:
                 circle = group.find("svg:circle", namespace)
+                text = group.find("svg:text", namespace)  # Find the associated text element
+
                 if circle is not None:
+                    # Load circle details
                     circle.set("r", str(standard_radius))
                     cx, cy = float(circle.get("cx")), float(circle.get("cy"))
                     dot = SelectableDot(QRectF(cx - standard_radius, cy - standard_radius,
-                                               standard_radius * 2, standard_radius * 2))
+                                            standard_radius * 2, standard_radius * 2))
                     dot.setBrush(QColor(color_map[class_attr]))
                     dot.setPen(Qt.NoPen)
 
@@ -390,20 +393,30 @@ class EditableSVG(QDialog):
                     dot.setZValue(10)
 
                     self.scene.addItem(dot)
-                    self.groups.append((dot, circle))
+
+                    # Append dot, circle, and text to the groups
+                    self.groups.append((dot, circle, text))
+
 
     def save_changes(self):
-        """Save updated positions of dots to the SVG file."""
+        """Save updated positions of dots and associated text elements to the SVG file."""
         # Declare the SVG namespace
         svg_ns = "http://www.w3.org/2000/svg"
         ET.register_namespace("", svg_ns)  # Set empty prefix for default namespace
 
-        # Update positions of the dots
-        for dot, circle in self.groups:
+        # Update positions of the dots and associated text elements
+        for dot, circle, text in self.groups:
             new_cx = dot.sceneBoundingRect().center().x()
             new_cy = dot.sceneBoundingRect().center().y()
+
+            # Update circle position
             circle.set("cx", str(new_cx))
             circle.set("cy", str(new_cy))
+
+            # Update text position (if it exists)
+            if text is not None:
+                text.set("x", str(new_cx))
+                text.set("y", str(new_cy - 5))  # Position text slightly above the circle
 
         # Write the modified SVG tree back to the file
         ET.indent(self.svg_tree, space="  ", level=0)  # Pretty-print XML for readability

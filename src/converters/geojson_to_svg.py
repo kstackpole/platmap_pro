@@ -153,6 +153,8 @@ def process_lots(gdf, svg, minx, miny, maxy, scale, x_padding, y_padding, canvas
 
             for dot_type, (dx, dy) in offsets.items():
                 dot_group = ET.SubElement(lot_group, "g", {"class": dot_type})
+                
+                # Create the circle element for the dot
                 ET.SubElement(dot_group, "circle", {
                     "cx": str(cx + dx),
                     "cy": str(cy + dy),
@@ -161,6 +163,17 @@ def process_lots(gdf, svg, minx, miny, maxy, scale, x_padding, y_padding, canvas
                     "stroke": "black",
                     "stroke-width": "1"
                 })
+
+                # Add an empty text element for constStatus and lotPremium
+                if dot_type in ["constStatus", "lotPremium"]:
+                    ET.SubElement(dot_group, "text", {
+                        "x": str(cx + dx),
+                        "y": str(cy + dy),  # Adjust the Y position slightly above the circle
+                        "font-size": "10px",
+                        "text-anchor": "middle",
+                        "fill": "#000000",
+                    }).text = ""  # Empty text content
+
 
 def add_layer_to_svg(gdf, layer_id, fill_color, minx, miny, maxy, scale, x_padding, y_padding, svg):
     """Add a GeoDataFrame layer to the SVG with proportional scaling."""
