@@ -62,9 +62,9 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
 
         # Magic Wand Action
-        magic_wand_action = QAction("Create new map", self)
-        magic_wand_action.triggered.connect(lambda: self.switch_context(0))
-        toolbar.addAction(magic_wand_action)
+        new_map_action = QAction("Create new map", self)
+        new_map_action.triggered.connect(lambda: self.switch_context(0))
+        toolbar.addAction(new_map_action)
 
         # SVG Editor Action
         svg_editor_action = QAction("Open SVG Editor", self)
