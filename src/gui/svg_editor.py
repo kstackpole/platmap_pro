@@ -10,6 +10,8 @@ from shapely.geometry import Point, Polygon
 import xml.etree.ElementTree as ET
 import sys
 import svg.path as svg_path
+import xml.dom.minidom as minidom
+
 
 
 class CustomGraphicsView(QGraphicsView):
@@ -413,14 +415,36 @@ class EditableSVG(QDialog):
             circle.set("cx", str(new_cx))
             circle.set("cy", str(new_cy))
 
-            # Update text position (if it exists)
+            # Find parent group manually
+            parent = circle.find("..")
+            parent_class = parent.get("class") if parent is not None else ""
+
+            # Update text transform property (instead of x and y)
             if text is not None:
-                text.set("x", str(new_cx))
-                text.set("y", str(new_cy - 5))  # Position text slightly above the circle
+                if parent_class == "constStatus":
+                    transform_matrix = f"matrix(1 0 0 1 {new_cx} {new_cy})"
+                elif parent_class == "lotPremium":
+                    transform_matrix = f"matrix(1 0 0 1 {new_cx} {new_cy})"
+                else:
+                    transform_matrix = f"matrix(1 0 0 1 {new_cx} {new_cy})"
+                text.set("transform", transform_matrix)
+
+        # Convert XML to string and pretty print
+        xml_str = ET.tostring(self.svg_tree.getroot(), encoding="utf-8").decode("utf-8")
+        parsed_xml = minidom.parseString(xml_str)
+        pretty_xml = parsed_xml.toprettyxml(indent="  ")
+
+        # Remove excessive blank lines
+        pretty_xml = "\n".join([line for line in pretty_xml.splitlines() if line.strip()])
+
+        # Ensure the header remains unchanged and remove duplicate header if exists
+        svg_header = """<svg version=\"1.0\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" x=\"0px\" y=\"0px\" width=\"1440px\" height=\"840px\" viewBox=\"0 0 1440 840\" xml:space=\"preserve\" preserveAspectRatio=\"xMinYMin\" style=\"width:100%\" class=\"tsPlotmap\">"""
+        pretty_xml = pretty_xml.replace('<?xml version="1.0" ?>', svg_header, 1)
+        pretty_xml = pretty_xml.replace(svg_header, "", 1)
 
         # Write the modified SVG tree back to the file
-        ET.indent(self.svg_tree, space="  ", level=0)  # Pretty-print XML for readability
-        self.svg_tree.write(self.output_file, encoding="utf-8", xml_declaration=True)
+        with open(self.output_file, "w", encoding="utf-8") as f:
+            f.write(pretty_xml)
         QMessageBox.information(self, "Success", f"Changes saved to {self.output_file}")
 
 
