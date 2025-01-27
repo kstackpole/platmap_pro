@@ -316,10 +316,6 @@ class EditableSVG(QDialog):
         self.scene.update()
 
 
-
-
-
-
     def setup_scene_viewbox(self):
         """Set up scene dimensions based on the SVG viewBox and resize the window accordingly."""
         self.scene.clear()
@@ -345,9 +341,24 @@ class EditableSVG(QDialog):
         self.resize(width + padding, height + padding)
 
     def render_static_svg(self):
-        """Render static elements like paths, circles, and other shapes."""
+        """Render static elements like paths, circles, and other shapes, excluding paths inside the 'text' group."""
         namespace = {"svg": "http://www.w3.org/2000/svg"}
+
+        # Find the 'text' group
+        text_group = self.root.find(".//svg:g[@id='text']", namespace)
+        text_paths = set()
+
+        if text_group is not None:
+            # Collect all paths inside the 'text' group
+            for path_elem in text_group.findall(".//svg:path", namespace):
+                text_paths.add(path_elem)
+
+        # Render all paths not in the 'text' group
         for path_elem in self.root.findall(".//svg:path", namespace):
+            if path_elem in text_paths:
+                continue  # Skip paths in the 'text' group
+
+            # Process and render the path
             d_attr = path_elem.get("d")
             if d_attr:
                 parsed_path = svg_path.parse_path(d_attr)
@@ -367,6 +378,7 @@ class EditableSVG(QDialog):
                 static_path_item.setPen(QPen(QColor(path_elem.get("stroke", "#000000"))))
                 static_path_item.setBrush(QBrush(QColor(path_elem.get("fill", "transparent"))))
                 self.scene.addItem(static_path_item)
+
 
     def load_groups(self):
         """Load editable groups and visually distinguish them by color."""
