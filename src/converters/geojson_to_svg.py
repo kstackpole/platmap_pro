@@ -74,11 +74,11 @@ def create_svg_root(canvas_width, canvas_height):
 def populate_svg(svg, lots_gdf, grass_gdf, water_gdf, road_gdf, minx, miny, maxy, scale, x_padding, y_padding, canvas_width, canvas_height, include_dots, colorize):
     open_roads_group = ET.SubElement(svg, "g", {"id": "open_roads"})
 
-    if grass_gdf is not None and not grass_gdf.empty:
-        add_layer_to_svg(grass_gdf, "grass", "grass", "#808057", minx, miny, maxy, scale, x_padding, y_padding, open_roads_group)
-    
     if road_gdf is not None and not road_gdf.empty:
         add_layer_to_svg(road_gdf, "road", "road", "#DBCDAE", minx, miny, maxy, scale, x_padding, y_padding, open_roads_group)
+
+    if grass_gdf is not None and not grass_gdf.empty:
+        add_layer_to_svg(grass_gdf, "grass", "grass", "#808057", minx, miny, maxy, scale, x_padding, y_padding, open_roads_group)
     
     if water_gdf is not None and not water_gdf.empty:
         add_layer_to_svg(water_gdf, "lakes", "lakes", "#73B0CC", minx, miny, maxy, scale, x_padding, y_padding, open_roads_group)
