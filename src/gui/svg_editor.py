@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QColor, QPainterPath, QPen, QBrush
 from PySide6.QtCore import Qt, QRectF
+from PySide6.QtWidgets import QGraphicsItem
 from svg.path import Line, CubicBezier, Move, Close
 from shapely.geometry import Point, Polygon
 import xml.etree.ElementTree as ET
@@ -52,14 +53,64 @@ class CustomGraphicsView(QGraphicsView):
 
 
 class SelectableDot(QGraphicsEllipseItem):
-    """Custom QGraphicsEllipseItem to support Shift-click and Cmd-click multi-selection."""
-    def mousePressEvent(self, event):
-        """Enable Shift+Click or Cmd+Click to add/remove dots from the selection."""
-        modifiers = event.modifiers()
-        if modifiers & (Qt.ShiftModifier | Qt.ControlModifier):  # Cmd is Qt.ControlModifier on macOS
-            self.setSelected(not self.isSelected())  # Toggle selection
-        else:
-            super().mousePressEvent(event)  # Default behavior for single selection
+    """Custom QGraphicsEllipseItem to support linked movement with house icons and other elements."""
+    def __init__(self, rect, path_item=None, text_item=None, polygon_item=None):
+        super().__init__(rect)
+        self.path_item = path_item  # House icon
+        self.text_item = text_item  # Text (e.g., lot number)
+        self.polygon_item = polygon_item  # Star (lotPremium)
+
+    def itemChange(self, change, value):
+        """Ensure that all linked elements move when the dot moves."""
+        if change == QGraphicsItem.ItemPositionChange:
+            dx = value.x() - self.sceneBoundingRect().center().x()
+            dy = value.y() - self.sceneBoundingRect().center().y()
+
+            if self.path_item:
+                d_attr = self.path_item.path().elementAt(0)  # Get current path
+                try:
+                    parsed_path = svg_path.parse_path(d_attr)
+                    adjusted_d = []
+
+                    for element in parsed_path:
+                        if isinstance(element, (Move, Line)):
+                            adjusted_d.append(f"M{element.start.real + dx},{element.start.imag + dy}")
+                            adjusted_d.append(f"L{element.end.real + dx},{element.end.imag + dy}")
+
+                        elif isinstance(element, CubicBezier):
+                            adjusted_d.append(
+                                f"C{element.control1.real + dx},{element.control1.imag + dy} "
+                                f"{element.control2.real + dx},{element.control2.imag + dy} "
+                                f"{element.end.real + dx},{element.end.imag + dy}"
+                            )
+
+                    updated_path = " ".join(adjusted_d)
+                    self.path_item.setPath(updated_path)
+
+                except Exception as e:
+                    print(f"Error updating path in itemChange: {e}")
+
+
+            if self.text_item is not None:
+                transform_values = self.text_item.get("transform").split()
+                old_x = float(transform_values[-2])
+                old_y = float(transform_values[-1].replace(")", ""))
+
+                new_x = old_x + dx
+                new_y = old_y + dy
+                self.text_item.set("transform", f"matrix(1 0 0 1 {new_x} {new_y})")
+
+            if self.polygon_item is not None:
+                original_points = self.polygon_item.get("points").split()
+                adjusted_points = [
+                    f"{float(p.split(',')[0]) + dx},{float(p.split(',')[1]) + dy}"
+                    for p in original_points
+                ]
+                self.polygon_item.set("points", " ".join(adjusted_points))
+
+        return super().itemChange(change, value)
+
+
 
 class EditableSVG(QDialog):
     def __init__(self, svg_file=None, output_file=None):
@@ -310,11 +361,10 @@ class EditableSVG(QDialog):
         self.scene.addItem(dot1)
         self.scene.addItem(dot2)
 
-        # Call `update` on the scene and dots
+        # Call update on the scene and dots
         dot1.update()
         dot2.update()
         self.scene.update()
-
 
     def setup_scene_viewbox(self):
         """Set up scene dimensions based on the SVG viewBox and resize the window accordingly."""
@@ -341,22 +391,26 @@ class EditableSVG(QDialog):
         self.resize(width + padding, height + padding)
 
     def render_static_svg(self):
-        """Render static elements like paths, circles, and other shapes, excluding paths inside the 'text' group."""
+        """Render static elements like paths, circles, and other shapes, excluding house icons."""
         namespace = {"svg": "http://www.w3.org/2000/svg"}
 
-        # Find the 'text' group
+        # Find 'text' group to exclude
         text_group = self.root.find(".//svg:g[@id='text']", namespace)
         text_paths = set()
 
         if text_group is not None:
-            # Collect all paths inside the 'text' group
             for path_elem in text_group.findall(".//svg:path", namespace):
                 text_paths.add(path_elem)
 
-        # Render all paths not in the 'text' group
+        # 🚨 Skip paths inside "soldStatus" groups (house icons)
+        for group in self.root.findall(".//svg:g[@class='soldStatus']", namespace):
+            for path in group.findall(".//svg:path", namespace):
+                text_paths.add(path)
+
+        # ✅ Render paths that are NOT in excluded sets
         for path_elem in self.root.findall(".//svg:path", namespace):
             if path_elem in text_paths:
-                continue  # Skip paths in the 'text' group
+                continue  # Skip house icons & text paths
 
             # Process and render the path
             d_attr = path_elem.get("d")
@@ -379,7 +433,6 @@ class EditableSVG(QDialog):
                 static_path_item.setBrush(QBrush(QColor(path_elem.get("fill", "transparent"))))
                 self.scene.addItem(static_path_item)
 
-
     def load_groups(self):
         """Load editable groups and visually distinguish them by color."""
         namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -390,74 +443,133 @@ class EditableSVG(QDialog):
             class_attr = group.get("class")
             if class_attr in color_map:
                 circle = group.find("svg:circle", namespace)
-                text = group.find("svg:text", namespace)  # Find the associated text element
+                text = group.find("svg:text", namespace)
+                polygon = group.find("svg:polygon", namespace)
+                path = group.find(".//svg:path", namespace)  # Nested house icon path
 
                 if circle is not None:
-                    # Load circle details
-                    circle.set("r", str(standard_radius))
                     cx, cy = float(circle.get("cx")), float(circle.get("cy"))
+
+                    # Create a dot for selection/movement
                     dot = SelectableDot(QRectF(cx - standard_radius, cy - standard_radius,
                                             standard_radius * 2, standard_radius * 2))
                     dot.setBrush(QColor(color_map[class_attr]))
                     dot.setPen(Qt.NoPen)
 
+                    # Enable movement
                     dot.setFlag(QGraphicsEllipseItem.ItemIsSelectable, True)
                     dot.setFlag(QGraphicsEllipseItem.ItemIsMovable, True)
                     dot.setFlag(QGraphicsEllipseItem.ItemSendsGeometryChanges, True)
                     dot.setZValue(10)
-
                     self.scene.addItem(dot)
 
-                    # Append dot, circle, and text to the groups
-                    self.groups.append((dot, circle, text))
+                    # Load and attach house icon correctly
+                    path_item = None
+                    if path is not None and path.get("data-processed") != "true":
+                        d_attr = path.get("d", "")
+                        try:
+                            parsed_path = svg_path.parse_path(d_attr)
+                            painter_path = QPainterPath()
 
+                            for element in parsed_path:
+                                if isinstance(element, svg_path.Move):
+                                    painter_path.moveTo(element.start.real, element.start.imag)
+                                elif isinstance(element, svg_path.Line):
+                                    painter_path.lineTo(element.end.real, element.end.imag)
+                                elif isinstance(element, svg_path.CubicBezier):
+                                    painter_path.cubicTo(
+                                        element.control1.real, element.control1.imag,
+                                        element.control2.real, element.control2.imag,
+                                        element.end.real, element.end.imag
+                                    )
+
+                            path_item = QGraphicsPathItem(painter_path)
+                            path_item.setPen(QPen(QColor("#000000")))
+                            path_item.setBrush(QBrush(QColor("#000000")))
+                            path_item.setZValue(11)  # Ensure it renders above dots
+                            path_item.setParentItem(dot)  # Attach to the dot
+
+                            path.set("data-processed", "true")  # Prevents duplicate renderings
+
+                        except Exception as e:
+                            print(f"Error processing path in load_groups: {e}")
+
+                    # Store elements together so they move as a unit
+                    self.groups.append((dot, circle, text, polygon, path, path_item))
 
     def save_changes(self):
-        """Save updated positions of dots and associated text elements to the SVG file."""
-        # Declare the SVG namespace
+        """Save updated positions of dots and associated elements (text, polygon, path) to the SVG file."""
         svg_ns = "http://www.w3.org/2000/svg"
-        ET.register_namespace("", svg_ns)  # Set empty prefix for default namespace
+        ET.register_namespace("", svg_ns)
 
-        # Update positions of the dots and associated text elements
-        for dot, circle, text in self.groups:
+        for dot, circle, text, polygon, path, path_item in self.groups:
             new_cx = dot.sceneBoundingRect().center().x()
             new_cy = dot.sceneBoundingRect().center().y()
 
-            # Update circle position
+            old_cx = float(circle.get("cx"))
+            old_cy = float(circle.get("cy"))
+
+            dx = new_cx - old_cx
+            dy = new_cy - old_cy
+
             circle.set("cx", str(new_cx))
             circle.set("cy", str(new_cy))
 
-            # Find parent group manually
-            parent = circle.find("..")
-            parent_class = parent.get("class") if parent is not None else ""
-
-            # Update text transform property (instead of x and y)
             if text is not None:
-                if parent_class == "constStatus":
-                    transform_matrix = f"matrix(1 0 0 1 {new_cx} {new_cy})"
-                elif parent_class == "lotPremium":
-                    transform_matrix = f"matrix(1 0 0 1 {new_cx} {new_cy})"
-                else:
-                    transform_matrix = f"matrix(1 0 0 1 {new_cx} {new_cy})"
-                text.set("transform", transform_matrix)
+                transform_values = text.get("transform").split()
+                old_x = float(transform_values[-2])
+                old_y = float(transform_values[-1].replace(")", ""))
 
-        # Convert XML to string and pretty print
+                new_x = old_x + dx
+                new_y = old_y + dy
+
+                text.set("transform", f"matrix(1 0 0 1 {new_x} {new_y})")
+
+            if polygon is not None:
+                original_points = polygon.get("points").split()
+                adjusted_points = [
+                    f"{float(p.split(',')[0]) + dx},{float(p.split(',')[1]) + dy}"
+                    for p in original_points
+                ]
+                polygon.set("points", " ".join(adjusted_points))
+
+            if path is not None:
+                d_attr = path.get("d", "")
+                try:
+                    parsed_path = svg_path.parse_path(d_attr)
+                    adjusted_d = []
+
+                    for element in parsed_path:
+                        if isinstance(element, Move):
+                            adjusted_d.append(f"M {element.start.real + dx},{element.start.imag + dy}")
+                        elif isinstance(element, Line):
+                            adjusted_d.append(f"L {element.end.real + dx},{element.end.imag + dy}")
+                        elif isinstance(element, CubicBezier):
+                            adjusted_d.append(
+                                f"C {element.control1.real + dx},{element.control1.imag + dy} "
+                                f"{element.control2.real + dx},{element.control2.imag + dy} "
+                                f"{element.end.real + dx},{element.end.imag + dy}"
+                            )
+                        elif isinstance(element, Close):
+                            adjusted_d.append("Z")  # Close path remains unchanged
+
+                    updated_path = " ".join(adjusted_d)
+                    path.set("d", updated_path)
+
+                except Exception as e:
+                    print(f"Error updating path in save_changes: {e}")
+
         xml_str = ET.tostring(self.svg_tree.getroot(), encoding="utf-8").decode("utf-8")
         parsed_xml = minidom.parseString(xml_str)
         pretty_xml = parsed_xml.toprettyxml(indent="  ")
-
-        # Remove excessive blank lines
         pretty_xml = "\n".join([line for line in pretty_xml.splitlines() if line.strip()])
 
-        # Ensure the header remains unchanged and remove duplicate header if exists
-        svg_header = """<svg version=\"1.0\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" x=\"0px\" y=\"0px\" width=\"1440px\" height=\"840px\" viewBox=\"0 0 1440 840\" xml:space=\"preserve\" preserveAspectRatio=\"xMinYMin\" style=\"width:100%\" class=\"tsPlotmap\">"""
-        pretty_xml = pretty_xml.replace('<?xml version="1.0" ?>', svg_header, 1)
-        pretty_xml = pretty_xml.replace(svg_header, "", 1)
-
-        # Write the modified SVG tree back to the file
         with open(self.output_file, "w", encoding="utf-8") as f:
             f.write(pretty_xml)
+
         QMessageBox.information(self, "Success", f"Changes saved to {self.output_file}")
+
+
 
 
 

@@ -207,7 +207,10 @@ def process_lots(gdf, svg, minx, miny, maxy, scale, x_padding, y_padding, canvas
         cx, cy = transform_coords(centroid.x, centroid.y, minx, miny, scale, maxy, x_padding, y_padding)
 
         if not colorize:
+            const_text = "300"
+            premium_text = "10k"
             data_group = ET.SubElement(lot_group, "g")
+            # Construction Status Group
             const_status_group = ET.SubElement(data_group, "g", {"class": "constStatus"})
             ET.SubElement(const_status_group, "circle", {
                 "fill": "#444445",
@@ -216,31 +219,53 @@ def process_lots(gdf, svg, minx, miny, maxy, scale, x_padding, y_padding, canvas
                 "r": "4"
             })
             ET.SubElement(const_status_group, "text", {
-                "transform": f"matrix(1 0 0 1 {cx + 5} {cy})",
+                "transform": f"matrix(1 0 0 1 {cx + 2.6} {cy + 1.2})",
                 "fill": "#FFFFFF",
                 "font-family": "'ArialMT'",
                 "font-size": "4px"
-            })
+            }).text = const_text
+
+            # Lot Premium Group
             lot_premium_group = ET.SubElement(data_group, "g", {"class": "lotPremium"})
             ET.SubElement(lot_premium_group, "circle", {
                 "fill": "#FFFFFF",
-                "cx": str(cx - 5),
-                "cy": str(cy),
-                "r": "4"
+                "cx": str(cx),
+                "cy": str(cy - 5),  # Moves up by 5px
+                "r": "3.8"
+            })
+            ET.SubElement(lot_premium_group, "polygon", {
+                "points": f"{cx+1.2},{cy-6.7} {cx+4},{cy-6.3} {cx+2},{cy-4.3} {cx+2.5},{cy-1.6} "
+                        f"{cx},{cy-2.9} {cx-2.4},{cy-1.6} {cx-2},{cy-4.3} {cx-3.9},{cy-6.2} "
+                        f"{cx-1.2},{cy-6.6} {cx},{cy-9.1}"
             })
             ET.SubElement(lot_premium_group, "text", {
-                "transform": f"matrix(1 0 0 1 {cx - 5} {cy})",
+                "transform": f"matrix(1 0 0 1 {cx-1.9} {cy-3.8})",
                 "fill": "#FFFFFF",
                 "font-family": "'ArialMT'",
-                "font-size": "4px"
-            })
+                "font-size": "2.3px"
+            }).text = premium_text
+
+            # Sold Status Group
             sold_status_group = ET.SubElement(data_group, "g", {"class": "soldStatus"})
             ET.SubElement(sold_status_group, "circle", {
                 "fill": "#FFFFFF",
-                "cx": str(cx),
-                "cy": str(cy - 5),
+                "cx": str(cx - 5),  # Moves left by 5px
+                "cy": str(cy),
                 "r": "4"
             })
+
+            # House icon inside Sold Status
+            sold_status_path_group = ET.SubElement(sold_status_group, "g")
+            ET.SubElement(sold_status_path_group, "path", {
+                "d": (f"M{cx-7.5},{cy}l2.5-2.2l2.5,2.2c0,0,0.1,0,0.1,0c0,0,0.1,0,0.1-0.1c0.1-0.1,0.1-0.2,0-0.2l-2.6-2.3c-0.1-0.1-0.2-0.1-0.2,0 "
+                    f"l-0.9,0.8v-0.3c0-0.2-0.2-0.3-0.3-0.3c-0.2,0-0.3,0.2-0.3,0.3v0.9l-1,0.9c-0.1,0.1-0.1,0.2,0,0.2 "
+                    f"C{cx-7.7},{cy+0.1},{cx-7.6},{cy+0.1},{cx-7.5},{cy}z M{cx-5.7},{cy+0.8}h1.4v1.7h1c0.2,0,0.3-0.2,0.3-0.3V{cy+0.5} "
+                    f"c0-0.1,0-0.2-0.1-0.3l-1.7-1.4c-0.1-0.1-0.1-0.1-0.2-0.1s-0.2,0-0.2,0.1l-1.7,1.4c-0.1,0.1-0.1,0.2-0.1,0.3v1.7 "
+                    f"c0,0.2,0.2,0.3,0.3,0.3h1V{cy+0.8}z"),
+                "fill": "#000000"
+            })
+
+
         if 0 <= cx <= canvas_width and 0 <= cy <= canvas_height:
             transform_matrix = f"matrix(1,0,0,1,{cx},{cy})"
             if colorize:
