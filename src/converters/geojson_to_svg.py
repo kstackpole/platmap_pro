@@ -267,7 +267,7 @@ def process_lots(gdf, svg, minx, miny, maxy, scale, x_padding, y_padding, canvas
 
 
         if 0 <= cx <= canvas_width and 0 <= cy <= canvas_height:
-            transform_matrix = f"matrix(1,0,0,1,{cx},{cy})"
+            transform_matrix = f"matrix(1 0 0 1 {cx} {cy})"
             if colorize:
                 text_element = ET.SubElement(community_text_groups[community_id], "text", {
                     "transform": transform_matrix,
@@ -282,7 +282,7 @@ def process_lots(gdf, svg, minx, miny, maxy, scale, x_padding, y_padding, canvas
                     "class": "commMapTxt",
                     "data-lot-id": f"{community_id}-{lot_job}"
                 })
-            text_element.text = legal_lot
+            text_element.text = legal_lot or "N/A"
 
     if unused_lots:
         unused_group = ET.SubElement(lots_group, "g", {"id": "unused", "class": "notavailable"})
