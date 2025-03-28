@@ -1,0 +1,24 @@
+# Virtual environments
+.venv/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs and other junk
+*.log
+*.sqlite
+*.db
+
+# MacOS metadata
+.DS_Store
+
+# Docs, wiki, misc
+wiki/
+docs/
+*.zip
